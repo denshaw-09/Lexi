@@ -3,11 +3,14 @@ import asyncio
 import feedparser
 import json
 import logging
+import time
 from datetime import datetime
 from typing import List, Dict
 from bs4 import BeautifulSoup
 from app.core.config import settings
-from .language_detector import LanguageFilter  # Add this import
+from .language_detector import LanguageFilter
+from supabase import create_client 
+from .processor import analyze_content  # for the brain :p
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,8 @@ class Web3ContentScraper:
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.session.close()
+        if self.session:
+            await self.session.close()
     
     def clean_article_content(self, title: str, summary: str) -> tuple[str, str]:
         """Clean and validate article content"""
@@ -37,11 +41,12 @@ class Web3ContentScraper:
         # Ensure reasonable length
         if len(clean_title) > 200:
             clean_title = clean_title[:197] + "..."
-        if len(clean_summary) > 500:
-            clean_summary = clean_summary[:497] + "..."
+        if len(clean_summary) > 3000:                # inc the limit for ai context window
+            clean_summary = clean_summary[:2997] + "..."
             
         return clean_title, clean_summary
     
+    # fetching logic
     async def scrape_medium_web3(self) -> List[Dict]:
         """Scrape real Medium Web3 articles with language filtering"""
         articles = []
@@ -53,8 +58,8 @@ class Web3ContentScraper:
                 "https://medium.com/feed/tag/blockchain",
                 "https://medium.com/feed/tag/ethereum",
                 "https://medium.com/feed/tag/defi",
-                "https://medium.com/feed/tag/solana",
-                "https://medium.com/feed/tag/cryptocurrency"
+                "https://medium.com/feed/tag/solana"
+                # "https://medium.com/feed/tag/cryptocurrency"
             ]
             
             for feed_url in medium_feeds:
@@ -76,7 +81,7 @@ class Web3ContentScraper:
                                 
                                 # Check if content is English
                                 if not self.language_filter.should_include_article(title, raw_summary):
-                                    logger.debug(f"🔍 Skipping non-English article: {title[:50]}...")
+                                    logger.debug(f"Skipping non-English article: {title[:50]}...")
                                     continue
                                 
                                 # Clean the content
@@ -88,7 +93,7 @@ class Web3ContentScraper:
                                     "summary": clean_summary or "Web3 content from Medium",
                                     "source": "medium",
                                     "ecosystem_tag": self._detect_ecosystem(clean_title + " " + clean_summary),
-                                    "published_date": datetime(*entry.published_parsed[:6]) if hasattr(entry, 'published_parsed') and entry.published_parsed else datetime.now()
+                                    "published_at": datetime(*entry.published_parsed[:6]).isoformat() if hasattr(entry, 'published_parsed') else datetime.utcnow().isoformat()
                                 }
                                 articles.append(article)
                                 
@@ -217,27 +222,10 @@ class Web3ContentScraper:
             snapshot_url = "https://hub.snapshot.org/graphql"
             
             queries = [
-                {
-                    "query": """
+                { "query": """
                     query {
-                      proposals (
-                        first: 10,
-                        skip: 0,
-                        where: { space_in: ["ens.eth", "aave.eth", "uniswap"] },
-                        orderBy: "created",
-                        orderDirection: desc
-                      ) {
-                        id
-                        title
-                        body
-                        start
-                        end
-                        snapshot
-                        state
-                        author
-                        space {
-                          id
-                          name
+                      proposals (first: 10, skip: 0, where: { space_in: ["ens.eth", "aave.eth", "uniswap"] }, orderBy: "created", orderDirection: desc ) { id title body start end snapshot state author 
+                        space { id name
                         }
                       }
                     }
@@ -492,59 +480,184 @@ class Web3ContentScraper:
                 seen_urls.add(article['url'])
                 unique_articles.append(article)
         
-        logger.info(f"Total unique English articles scraped: {len(unique_articles)}")
+        # logger.info(f"Total unique English articles scraped: {len(unique_articles)}")
         return unique_articles
 
 # Background agent runner
+# async def run_scraping_agent():
+#     """
+#     Orchestrates the Agent:
+#         1. Scrape (Collector)
+#         2. Check DB (Optimization)
+#         3. Analyze (Brain)
+#         4. Save (Memory)
+#     """
+#     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+
+#     async with Web3ContentScraper() as scraper:
+#         logger.info("Agent: Starting collection cycle...")
+#         articles = await scraper.scrape_all_sources()
+        
+#         if not articles:
+#             logger.warning("Agent: No articles found.")
+#             return 0
+        
+#         stored_count = 0 
+#         logger.info(f"Agent: Processing {len(articles)} potential articles...")
+        
+#         # Check legitimacy and store in database
+#         # from .verifier import LegitimacyChecker
+#         # from app.models.schemas import ArticleCreate
+#         # from supabase import create_client
+#         # from app.core.config import settings
+        
+#         # checker = LegitimacyChecker()
+#         # supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        
+#         for article_data in articles:
+#             try:
+#                 # legitimacy_score = checker.check_legitimacy(article_data)
+#                 existing = supabase.table("articles").select("id").eq("url", article_data["url"]).execute()
+#                 if existing.data:
+#                     continue
+
+#                 # 2. Normalize Data (Fixing the KeyError here)
+#                 # Some scrapers use 'content', some use 'summary'. We take whichever exists.
+#                 article_text = article_data.get("content") or article_data.get("summary") or ""
+#                 article_date = article_data.get("published_at") or article_data.get("published_date")
+
+#                 # 3. We combine title + content to give the AI context
+#                 full_text_for_ai = f"{article_data['title']}\n\n{article_data['content']}"  
+
+#                 logger.info(f"Agent: Thinking about '{article_data['title'][:30]}...'")
+#                 ai_analysis = analyze_content(article_data['title'], full_text_for_ai)
+                
+#                 # merge scraper with AI data 
+#                 # article = ArticleCreate(
+#                 #     title=article_data["title"][:500],
+#                 #     url=article_data["url"],
+#                 #     summary=article_data.get("summary", "")[:1000],
+#                 #     source=article_data["source"],
+#                 #     ecosystem_tag=article_data["ecosystem_tag"],
+#                 #     legitimacy_score=legitimacy_score
+#                 # )
+
+#                 # 4. preparing final data payload
+#                 db_payload = {
+#                     "title": article_data["title"],
+#                     "url": article_data["url"],
+#                     "source": article_data["source"],
+#                     "created_at": article_data,  # Matches the key in scraper functions
+                    
+#                     # AI Generated Fields
+#                     "summary": ai_analysis.get("summary", article_data["content"][:500]), # Fallback to raw summary
+#                     "ecosystem_tag": ai_analysis.get("ecosystem_tag", article_data["ecosystem_tag"]), # AI overrides scraper
+#                     "legitimacy_score": ai_analysis.get("legitimacy_score", 0.5),
+#                     "sentiment_score": ai_analysis.get("sentiment_score", 5),
+#                     "is_processed": True
+#                 }
+
+#                 # Check if article already exists
+#                 # existing = supabase.table("articles").select("id").eq("url", article.url).execute()
+                
+#                 # if not existing.data:
+#                 #     result = supabase.table("articles").insert(article.dict()).execute()
+#                 #     if result.data:
+#                 #         stored_count += 1
+#                 #         logger.info(f"Stored English article: {article.title[:60]}... (Score: {legitimacy_score})")
+#                 #     else:
+#                 #         logger.warning(f"Failed to store: {article.title[:60]}")
+#                 # else:
+#                 #     logger.info(f"Already exists: {article.title[:60]}")
+
+#                 # 5. save to supabase
+#                 result = supabase.table("articles").insert(db_payload).execute()
+#                 if result.data:
+#                     stored_count += 1
+#                     logger.info(f"Agent: Saved '{article_data['title'][:30]}'")
+                    
+#             except Exception as e:
+#                 # logger.error(f"Error storing article: {e}")
+#                 logger.error(f"Agent Error processing {article_data.get('url')}: {e}")
+#                 continue
+        
+#         # logger.info(f"Successfully stored {stored_count} new English articles in database")
+#         logger.info(f"Agent Cycle Complete. New Articles: {stored_count}")
+#         return stored_count
 async def run_scraping_agent():
-    """Main function to run the real scraping agent with language filtering"""
+    """
+    Orchestrates the Agent:
+        1. Scrape (Collector)
+        2. Check DB (Optimization)
+        3. Analyze (Brain)
+        4. Save (Memory)
+    """
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
     async with Web3ContentScraper() as scraper:
+        logger.info("Agent: Starting collection cycle...")
         articles = await scraper.scrape_all_sources()
         
         if not articles:
-            logger.warning("No English articles scraped from any source")
+            logger.warning("Agent: No articles found.")
             return 0
         
-        # Check legitimacy and store in database
-        from .verifier import LegitimacyChecker
-        from app.models.schemas import ArticleCreate
-        from supabase import create_client
-        from app.core.config import settings
+        stored_count = 0 
+        logger.info(f"Agent: Processing {len(articles)} potential articles...")
         
-        checker = LegitimacyChecker()
-        supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-        
-        stored_count = 0
-        for article_data in articles:
+        for i, article_data in enumerate(articles):
             try:
-                legitimacy_score = checker.check_legitimacy(article_data)
-                
-                # Store all English articles
-                article = ArticleCreate(
-                    title=article_data["title"][:500],
-                    url=article_data["url"],
-                    summary=article_data.get("summary", "")[:1000],
-                    source=article_data["source"],
-                    ecosystem_tag=article_data["ecosystem_tag"],
-                    legitimacy_score=legitimacy_score
-                )
-                
-                # Check if article already exists
-                existing = supabase.table("articles").select("id").eq("url", article.url).execute()
-                
-                if not existing.data:
-                    result = supabase.table("articles").insert(article.dict()).execute()
-                    if result.data:
-                        stored_count += 1
-                        logger.info(f"Stored English article: {article.title[:60]}... (Score: {legitimacy_score})")
-                    else:
-                        logger.warning(f"Failed to store: {article.title[:60]}")
+                # 1. Check if exists
+                existing = supabase.table("articles").select("id").eq("url", article_data["url"]).execute()
+                if existing.data:
+                    continue
+
+                # 2. Normalize Data (Fixing the KeyError here)
+                # We look for 'content', if not found, we look for 'summary', if not found, empty string.
+                article_text = article_data.get("content") or article_data.get("summary") or ""
+                # article_date = article_data.get("published_at") or article_data.get("published_date")
+                raw_date = article_data.get("published_at") or article_data.get("published_date")
+                if isinstance(raw_date, datetime):
+                    article_date = raw_date.isoformat()
                 else:
-                    logger.info(f"Already exists: {article.title[:60]}")
+                    article_date = str(raw_date)
+
+                # 3. AI Analysis
+                full_text_for_ai = f"{article_data['title']}\n\n{article_text}"
+
+                logger.info(f"Agent: Thinking about '{article_data['title'][:30]}...'")
+
+                # rate set: PAUSE FOR 5 SECONDS 
+                if i > 0: 
+                    time.sleep(5)
+
+                ai_analysis = analyze_content(article_data['title'], full_text_for_ai)
+                
+                # 4. Prepare Payload
+                db_payload = {
+                    "title": article_data["title"],
+                    "url": article_data["url"],
+                    "source": article_data["source"],
+                    "created_at": article_date,
+                    
+                    # AI Generated Fields
+                    # FIXED: Use 'article_text' for fallback
+                    "summary": ai_analysis.get("summary", article_text[:500]), 
+                    "ecosystem_tag": ai_analysis.get("ecosystem_tag", article_data.get("ecosystem_tag", "General")),
+                    "legitimacy_score": ai_analysis.get("legitimacy_score", 0.5),
+                    "sentiment_score": ai_analysis.get("sentiment_score", 5),
+                    "is_processed": True
+                }
+
+                # 5. Save to Supabase
+                result = supabase.table("articles").insert(db_payload).execute()
+                if result.data:
+                    stored_count += 1
+                    logger.info(f"Agent: Saved '{article_data['title'][:30]}'")
                     
             except Exception as e:
-                logger.error(f"Error storing article: {e}")
+                logger.error(f"Agent Error processing {article_data.get('url')}: {e}")
                 continue
         
-        logger.info(f"Successfully stored {stored_count} new English articles in database")
+        logger.info(f"Agent Cycle Complete. New Articles: {stored_count}")
         return stored_count
