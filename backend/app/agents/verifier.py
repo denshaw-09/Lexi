@@ -12,13 +12,13 @@ class LegitimacyChecker:
             "free", "giveaway", "airdrop", "limited time", "urgent",
             "guaranteed", "100% return", "double your", "secret",
             "don't miss", "last chance", "exclusive", "click here",
-            "sign up now", "limited supply", "once in a lifetime"
+            "sign up now", "limited supply", "once in a lifetime" , "discount" 
         ]
         
         self.trusted_authors = [
             "vitalik", "buterin", "paradigm", "a16z", "coinbase",
             "base", "ethereum", "official", "foundation", "solana",
-            "farcaster", "snapshot", "governance"
+            "farcaster", "snapshot", "governance" 
         ]
         
         self.trusted_domains = [

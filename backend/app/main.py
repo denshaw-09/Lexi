@@ -2,14 +2,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 from app.routers import feed, user, agent
 from app.core.config import settings
 from app.agents.runner import start_scheduler, run_scheduler
 
+# logging block
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    encoding='utf-8',
+    force=True  # This will override any default Uvicorn loggers
+)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Start the agent scheduler
-    print("🚀 Starting Lexi Agent Scheduler...")
+    print("Starting Lexi Agent Scheduler...")
     start_scheduler()
     
     # Start the scheduler in background
@@ -18,12 +27,12 @@ async def lifespan(app: FastAPI):
     yield  # App runs here
     
     # Shutdown: Clean up resources
-    print("🛑 Shutting down Lexi Agent...")
+    print("Shutting down Lexi Agent...")
 
 app = FastAPI(
     title="Lexi Agent API",
     version="1.0.0",
-    description="AI-powered Web3 content aggregator with retro interface",
+    description="AI-powered Web3 content aggregator",
     lifespan=lifespan
 )
 

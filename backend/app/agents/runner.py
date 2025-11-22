@@ -1,3 +1,10 @@
+import socket
+old_getaddrinfo = socket.getaddrinfo
+def new_getaddrinfo(*args, **kwargs):
+    responses = old_getaddrinfo(*args, **kwargs)
+    return [response for response in responses if response[0] == socket.AF_INET]
+socket.getaddrinfo = new_getaddrinfo
+
 import asyncio
 import schedule
 import time
@@ -18,18 +25,18 @@ logger = logging.getLogger(__name__)
 async def run_agent():
     """Run the real content scraping agent once"""
     try:
-        logger.info("🔄 Starting REAL content scraping agent...")
+        logger.info("Starting REAL content scraping agent...")
         stored_count = await run_scraping_agent()
         
         if stored_count > 0:
-            logger.info(f"✅ Real content scraping completed - stored {stored_count} new articles")
+            logger.info(f"Real content scraping completed - stored {stored_count} new articles")
         else:
-            logger.info("ℹ️  No new articles stored - may already exist in database")
+            logger.info("No new articles stored - may already exist in database")
             
         return stored_count
         
     except Exception as e:
-        logger.error(f"❌ Error in real scraping agent: {e}")
+        logger.error(f"Error in real scraping agent: {e}")
         return 0
 
 def scheduled_job():
@@ -45,7 +52,7 @@ def start_scheduler():
     schedule.every(30).minutes.do(scheduled_job)  # Quick updates
     schedule.every(6).hours.do(scheduled_job)     # Deep scrape
     
-    logger.info("🕐 Real content agent scheduler started")
+    logger.info("Real content agent scheduler started")
     logger.info("   - Running every 30 minutes for quick updates")
     logger.info("   - Deep scrape every 6 hours")
 

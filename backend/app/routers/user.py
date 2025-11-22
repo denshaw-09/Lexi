@@ -11,7 +11,7 @@ supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 async def get_nonce(wallet_address: str):
     nonce = generate_nonce()
     # In production, store nonce with expiration
-    return {"nonce": nonce, "message": f"Login to Nexus Agent. Nonce: {nonce}"}
+    return {"nonce": nonce, "message": f"Login to Lexi. Nonce: {nonce}"}
 
 @router.post("/auth/verify")
 async def verify_wallet_signature(wallet_address: str, signature: str, message: str):

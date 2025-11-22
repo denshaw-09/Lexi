@@ -10,7 +10,7 @@ supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 @router.get("/", response_model=List[Article])
 async def get_feed(
     ecosystem: str = Query(None, description="Filter by ecosystem"),
-    limit: int = Query(20, description="Number of articles to return")
+    limit: int = Query(30, description="Number of articles to return")
 ):
     try:
         query = supabase.table("articles").select("*").order("created_at", desc=True).limit(limit)
