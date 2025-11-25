@@ -3,12 +3,16 @@ from datetime import datetime
 from typing import Optional
 
 class ArticleBase(BaseModel):
+    id: str
     title: str
     url: str
     summary: Optional[str] = None
-    source: str
-    ecosystem_tag: str
-    legitimacy_score: float
+    source: Optional[str] = None
+    ecosystem_tag: Optional[str] = None
+    legitimacy_score: Optional[float] = None
+    sentiment_score: Optional[float] = None
+    created_at: datetime
+    published_at: Optional[datetime] = None
 
 class ArticleCreate(ArticleBase):
     pass

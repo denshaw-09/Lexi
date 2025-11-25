@@ -19,50 +19,6 @@ const FeedPage = () => {
     { value: 'research', label: 'Research' }
   ];
 
-  // Test data
-  const testArticles = [
-    {
-      id: '1',
-      title: 'Ethereum Protocol Updates and Roadmap',
-      summary: 'Latest developments in Ethereum protocol including upcoming upgrades and improvements for scalability.',
-      source: 'ethereum',
-      ecosystem_tag: 'ethereum',
-      legitimacy_score: 0.95,
-      url: 'https://ethereum.org',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: '2',
-      title: 'Base Ecosystem Growth Analysis',
-      summary: 'Comprehensive report on Base network growth, developer adoption, and ecosystem expansion.',
-      source: 'base',
-      ecosystem_tag: 'base',
-      legitimacy_score: 0.88,
-      url: 'https://base.org',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: '3',
-      title: 'Farcaster Social Protocol Updates',
-      summary: 'Recent improvements to Farcaster protocol and new features for decentralized social networking.',
-      source: 'farcaster',
-      ecosystem_tag: 'farcaster',
-      legitimacy_score: 0.92,
-      url: 'https://farcaster.xyz',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: '4',
-      title: 'Web3 Development Best Practices',
-      summary: 'Essential guidelines and best practices for building secure and scalable Web3 applications.',
-      source: 'web3',
-      ecosystem_tag: 'web3',
-      legitimacy_score: 0.85,
-      url: 'https://web3.dev',
-      created_at: new Date().toISOString()
-    }
-  ];
-
   const loadArticles = async () => {
     setLoading(true);
     try {
@@ -72,10 +28,15 @@ const FeedPage = () => {
       } else {
         data = await feedAPI.getFeed(selectedEcosystem);
       }
-      setArticles(data && data.length > 0 ? data : testArticles);
+      
+      // FIX: Trust the API response. If it's empty, it's empty.
+      // Don't fallback to test data, or you'll never know if scraping worked.
+      setArticles(data || []); 
+      
     } catch (error) {
       console.error('Error loading articles:', error);
-      setArticles(testArticles);
+      // Optional: You could set an error state here to show a message to the user
+      setArticles([]); 
     } finally {
       setLoading(false);
     }
@@ -121,7 +82,10 @@ const FeedPage = () => {
                 {ecosystems.map(eco => (
                   <button
                     key={eco.value}
-                    onClick={() => setSelectedEcosystem(eco.value)}
+                    onClick={() => {
+                      setSelectedEcosystem(eco.value);
+                      setSearchQuery(''); // Clear search when switching filters
+                    }}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '8px',
@@ -204,7 +168,7 @@ const FeedPage = () => {
           </div>
         </div>
 
-        {/* Articles Grid - 4 cards per row */}
+        {/* Content Area */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem' }}>
             <div style={{
@@ -216,15 +180,22 @@ const FeedPage = () => {
               animation: 'spin 1s linear infinite'
             }}></div>
           </div>
-        ) : (
+        ) : articles.length > 0 ? (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', // Increased min-width slightly
             gap: '1.5rem'
           }}>
             {articles.map(article => (
               <ArticleCard key={article.id} article={article} />
             ))}
+          </div>
+        ) : (
+          // Empty State
+          <div style={{ textAlign: 'center', padding: '4rem 0', color: '#64748b' }}>
+            <div style={{ fontSize: '48px', marginBottom: '1rem' }}>📭</div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>No articles found</h3>
+            <p>Try adjusting your filters or check back later for new intelligence.</p>
           </div>
         )}
       </div>

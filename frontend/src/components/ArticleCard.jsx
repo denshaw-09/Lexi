@@ -19,6 +19,8 @@ const ArticleCard = ({ article }) => {
   };
 
   const getEcosystemColor = (ecosystem) => {
+    const tag = ecosystem ? ecosystem.toLowerCase() : 'web3';
+
     const colors = {
       ethereum: { bg: '#ede9fe', text: '#7c3aed' },
       base: { bg: '#dbeafe', text: '#1d4ed8' },
@@ -28,11 +30,17 @@ const ArticleCard = ({ article }) => {
       defi: { bg: '#fef3c7', text: '#d97706' },
       research: { bg: '#cffafe', text: '#0891b2' }
     };
-    return colors[ecosystem] || { bg: '#f1f5f9', text: '#475569' };
+    // return colors[ecosystem] || { bg: '#f1f5f9', text: '#475569' };
+    return colors[tag] || colors['web3'];
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return 'Recent';
+    const date = new Date(dateString);
+    // Check if date is valid
+    if (isNaN(date.getTime())) return 'Recent';
+    
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -71,6 +79,7 @@ const ArticleCard = ({ article }) => {
         }}>
           {article.ecosystem_tag?.toUpperCase() || 'WEB3'}
         </div>
+        {/* Trust Score */}
         <div style={{
           position: 'absolute',
           top: '12px',
@@ -84,6 +93,7 @@ const ArticleCard = ({ article }) => {
         }}>
           {Math.round(article.legitimacy_score * 100)}% Trust
         </div>
+        {/* Large Letter Icon */}
         <div style={{
           fontSize: '32px',
           color: ecosystemColor.text,
@@ -163,16 +173,19 @@ const ArticleCard = ({ article }) => {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Source Icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
               <span style={{ textTransform: 'capitalize' }}>{article.source}</span>
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Date Icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span>{formatDate(article.created_at)}</span>
+              {/* <span>{formatDate(article.created_at)}</span> */}
+              <span>{formatDate(article.published_at || article.created_at)}</span>
             </span>
           </div>
           
