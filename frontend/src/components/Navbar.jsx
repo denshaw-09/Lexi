@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
-  const { user, connectWallet, disconnect, isAuthenticated } = useAuth();
+  const { user, login, isAuthenticated, logout } = useAuth();
   const location = useLocation();
 
   return (
@@ -74,7 +74,7 @@ const Navbar = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {!isAuthenticated ? (
               <button
-                onClick={connectWallet}
+                onClick={login}
                 style={{
                   background: 'linear-gradient(135deg, #14b8a6, #0d9488)',
                   color: 'white',
@@ -98,10 +98,11 @@ const Navbar = () => {
                   fontSize: '14px',
                   fontFamily: 'monospace'
                 }}>
-                  {user?.address.slice(0, 6)}...{user?.address.slice(-4)}
+                  {/* {user?.address.slice(0, 6)}...{user?.address.slice(-4)} */}
+                  {user?.address ? `${user.address.slice(0, 6)}...${user.address.slice(-4)}` : ''}
                 </div>
                 <button
-                  onClick={disconnect}
+                  onClick={logout}
                   style={{
                     color: '#64748b',
                     background: 'none',

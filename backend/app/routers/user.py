@@ -1,32 +1,83 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from app.models.schemas import User, UserCreate, Bookmark, BookmarkCreate
 from app.core.security import verify_signature, generate_nonce
 from app.core.config import settings
 from supabase import create_client
+from eth_account.messages import encode_defunct
+from eth_account import Account
+from pydantic import BaseModel
+import uuid
 
 router = APIRouter(prefix="/user", tags=["user"])
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
+# Request Models
+class AuthRequest(BaseModel):
+    wallet_address: str
+
+class VerifyRequest(BaseModel):
+    wallet_address: str
+    signature: str
+
 @router.post("/auth/nonce")
-async def get_nonce(wallet_address: str):
-    nonce = generate_nonce()
-    # In production, store nonce with expiration
-    return {"nonce": nonce, "message": f"Login to Lexi. Nonce: {nonce}"}
+async def get_nonce(request: AuthRequest):
+    address = request.wallet_address.lower()
+    
+    # 1. Check if user exists
+    user = supabase.table("users").select("*").eq("wallet_address", address).execute()
+    
+    nonce = str(uuid.uuid4())
+    
+    if not user.data:
+        # Create new user
+        supabase.table("users").insert({
+            "wallet_address": address,
+            "nonce": nonce
+        }).execute()
+    else:
+        # Update nonce
+        supabase.table("users").update({"nonce": nonce}).eq("wallet_address", address).execute()
+        
+    return {"nonce": nonce}
 
 @router.post("/auth/verify")
-async def verify_wallet_signature(wallet_address: str, signature: str, message: str):
-    if not verify_signature(wallet_address, signature, message):
-        raise HTTPException(status_code=401, detail="Invalid signature")
+async def verify_signature(request: VerifyRequest):
+    address = request.wallet_address.lower()
     
-    # Create or update user
-    user_data = {
-        "wallet_address": wallet_address.lower(),
-        "last_login": "now()"
-    }
+    # 1. Get user and nonce from DB
+    user_response = supabase.table("users").select("nonce").eq("wallet_address", address).execute()
     
-    supabase.table("users").upsert(user_data).execute()
+    if not user_response.data:
+        raise HTTPException(status_code=400, detail="User not found")
+        
+    stored_nonce = user_response.data[0]['nonce']
     
-    return {"status": "success", "user": wallet_address}
+    # 2. Reconstruct the EXACT message the frontend signed
+    # MUST MATCH FRONTEND EXACTLY (Spaces, punctuation, everything)
+    message_text = f"Login to Lexi. Nonce: {stored_nonce}"
+    
+    try:
+        # 3. Verify Signature
+        # Encode as EIP-191 (Ethereum standard)
+        encoded_msg = encode_defunct(text=message_text)
+        recovered_address = Account.recover_message(encoded_msg, signature=request.signature)
+        
+        if recovered_address.lower() == address:
+            # Success! Generate a session token or just return success
+            # Ideally, clear the nonce here to prevent replay attacks
+            new_nonce = str(uuid.uuid4())
+            supabase.table("users").update({"nonce": new_nonce}).eq("wallet_address", address).execute()
+            
+            return {
+                "authenticated": True, 
+                "user": {"address": address}
+            }
+        else:
+            raise HTTPException(status_code=401, detail="Invalid signature")
+            
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        raise HTTPException(status_code=401, detail="Signature verification failed")
 
 @router.post("/bookmarks", response_model=Bookmark)
 async def create_bookmark(bookmark: BookmarkCreate):

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../api/auth';
+import { ethers } from 'ethers';
 
 const AuthContext = createContext();
 
@@ -14,58 +14,85 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        setLoading(true);
-        const accounts = await window.ethereum.request({ 
-          method: 'eth_requestAccounts' 
-        });
-        const address = accounts[0];
-        
-        // Get nonce from backend
-        const nonceData = await authAPI.getNonce(address);
-        
-        // Sign message
-        const signature = await window.ethereum.request({
-          method: 'personal_sign',
-          params: [nonceData.message, address],
-        });
-        
-        // Verify signature with backend
-        const userData = await authAPI.verifySignature(address, signature, nonceData.message);
-        setUser({ address });
-        
-        localStorage.setItem('userAddress', address);
-      } catch (error) {
-        console.error('Wallet connection failed:', error);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      alert('Please install MetaMask!');
-    }
-  };
-
-  const disconnect = () => {
-    setUser(null);
-    localStorage.removeItem('userAddress');
-  };
-
+  // 1. Check connection on load
   useEffect(() => {
     const savedAddress = localStorage.getItem('userAddress');
     if (savedAddress) {
       setUser({ address: savedAddress });
+      setIsAuthenticated(true);
     }
   }, []);
 
+  // 2. Login Function
+  const login = async () => {
+    if (!window.ethereum) {
+      alert("Please install MetaMask!");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      // Get Nonce
+      const nonceRes = await fetch('http://127.0.0.1:8000/api/v1/user/auth/nonce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: address })
+      });
+      const { nonce } = await nonceRes.json();
+
+      // Sign Message
+      const message = `Login to Lexi. Nonce: ${nonce}`;
+      const signature = await signer.signMessage(message);
+
+      // Verify
+      const verifyRes = await fetch('http://127.0.0.1:8000/api/v1/user/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          wallet_address: address,
+          signature: signature 
+        })
+      });
+
+      if (!verifyRes.ok) throw new Error('Verification failed');
+
+      const data = await verifyRes.json();
+      
+      if (data.authenticated) {
+        setUser({ address: address });
+        setIsAuthenticated(true);
+        localStorage.setItem('userAddress', address);
+      }
+    } catch (error) {
+      console.error("Login failed:", error);
+      alert("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Logout Function
+  const logout = () => {
+    setUser(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem('userAddress');
+    // Optional: Reload page to clear any other state
+    window.location.reload();
+  };
+
+  // 4. Expose functions consistently
   const value = {
     user,
     loading,
-    connectWallet,
-    disconnect,
-    isAuthenticated: !!user
+    isAuthenticated,
+    login,   // Use this to connect
+    logout   // Use this to disconnect
   };
 
   return (

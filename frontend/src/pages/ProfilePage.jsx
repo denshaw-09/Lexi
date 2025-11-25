@@ -4,22 +4,33 @@ import { feedAPI } from '../api/feed';
 import ArticleCard from '../components/ArticleCard';
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, login } = useAuth();
   const [bookmarks, setBookmarks] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       loadBookmarks();
+    } else {
+      setLoading(false);
     }
   }, [user]);
 
   const loadBookmarks = async () => {
+    setLoading(true);
     try {
       const data = await feedAPI.getBookmarks(user.address);
+
+      // check: ensure data is an arr b4 mapping
+      const safeData = Array.isArray(data) ? data : [];
+
+      // handle supabase join structure (if article is nested) or flat structure
+      const processedBookmarks = safeData.map(item => item.articles ? item.articles : item);
+
       setBookmarks(data.map(item => item.articles || item));
     } catch (error) {
       console.error('Error loading bookmarks:', error);
+      setBookmarks([]);
     } finally {
       setLoading(false);
     }
@@ -36,6 +47,9 @@ const ProfilePage = () => {
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Authentication Required</h2>
           <p className="text-slate-600 mb-6">Please connect your wallet to access your profile</p>
+          <button onClick={login} className="w-full py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors" >
+            Connect Wallet
+          </button>
         </div>
       </div>
     );
